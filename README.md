@@ -3,6 +3,17 @@
 Supabase-first V1 scaffold focused on correctness for bookings, wallet ledger,
 commissions, hierarchy, and auditability.
 
+## Main Reference
+
+- Primary resume document: `docs/DEVELOPMENT_GUIDE.md`
+- Use it as the source of truth for:
+  - current architecture/state snapshot
+  - applied migrations map
+  - implemented API surface
+  - role matrix
+  - test workflow
+  - next development priorities
+
 ## Stack
 
 - Next.js (App Router) + TypeScript
