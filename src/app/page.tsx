@@ -1,6 +1,11 @@
+import { ThemeToggle } from "@/components/theme-toggle";
+
 export default function Home() {
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-6 py-16">
+      <div className="flex justify-end">
+        <ThemeToggle />
+      </div>
       <section className="space-y-4">
         <h1 className="text-3xl font-bold tracking-tight">
           Travelling Agency Management System - V1
@@ -38,18 +43,24 @@ export default function Home() {
         />
       </section>
 
-      <section className="flex gap-3">
+      <section className="flex flex-wrap gap-3">
         <a
           href="/login"
           className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-black"
         >
-          Go to Login
+          Sign in
+        </a>
+        <a
+          href="/signup"
+          className="rounded-md bg-lime-400 px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-lime-300"
+        >
+          Create account
         </a>
         <a
           href="/dashboard"
           className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium dark:border-zinc-700"
         >
-          Go to Dashboard
+          Dashboard
         </a>
       </section>
     </main>

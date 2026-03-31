@@ -1,9 +1,12 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { Role } from "@/server/core/types";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { getDepositAmount } from "@/server/modules/booking/deposit-rule";
 
 type DashboardClientProps = {
   role: Role;
@@ -20,7 +23,14 @@ export function DashboardClient({ role, userId }: DashboardClientProps) {
     role === "agent" ? userId : "",
   );
   const [newPackageTitle, setNewPackageTitle] = useState("");
+  const [newPackageDescription, setNewPackageDescription] = useState("");
   const [newPackagePrice, setNewPackagePrice] = useState("7500");
+  const [newPackageSeatLimit, setNewPackageSeatLimit] = useState("30");
+  const [newPackageTravelStart, setNewPackageTravelStart] = useState("");
+  const [newPackageTravelEnd, setNewPackageTravelEnd] = useState("");
+  const [newPackageBookingCutoff, setNewPackageBookingCutoff] = useState("");
+  const [newPackageIsActive, setNewPackageIsActive] = useState(true);
+  const [packageFormError, setPackageFormError] = useState<string | null>(null);
   const [topupAmount, setTopupAmount] = useState("300");
   const [adminTopupTargetUserId, setAdminTopupTargetUserId] = useState("");
   const [adminTopupAmount, setAdminTopupAmount] = useState("300");
@@ -255,21 +265,41 @@ export function DashboardClient({ role, userId }: DashboardClientProps) {
     event.preventDefault();
     if (!canAdminActions) return;
 
+    const title = newPackageTitle.trim();
+    if (!title) {
+      setPackageFormError("Title is required.");
+      return;
+    }
+
+    setPackageFormError(null);
     setIsLoading(true);
     setResponseText("");
 
     try {
-      const priceRm = Number(newPackagePrice);
       const { result } = await postJson("/api/packages", {
-        title: newPackageTitle,
-        priceRm,
-        isActive: true,
+        title,
+        description: newPackageDescription,
+        priceRm: Number(newPackagePrice),
+        seatLimit: Number(newPackageSeatLimit),
+        travelStartDate: newPackageTravelStart,
+        travelEndDate: newPackageTravelEnd,
+        bookingCutoffDate: newPackageBookingCutoff,
+        isActive: newPackageIsActive,
       });
       setResponseText(JSON.stringify(result, null, 2));
       if (result.ok) {
         setNewPackageTitle("");
+        setNewPackageDescription("");
         setNewPackagePrice("7500");
+        setNewPackageSeatLimit("30");
+        setNewPackageTravelStart("");
+        setNewPackageTravelEnd("");
+        setNewPackageBookingCutoff("");
+        setNewPackageIsActive(true);
+        setPackageFormError(null);
         await loadPackages();
+      } else if (typeof result.message === "string") {
+        setPackageFormError(result.message);
       }
     } finally {
       setIsLoading(false);
@@ -554,6 +584,24 @@ export function DashboardClient({ role, userId }: DashboardClientProps) {
     const y = new Date().getUTCFullYear();
     return Array.from({ length: 11 }, (_, i) => String(y - 3 + i));
   }, []);
+  const roleDisplay = useMemo(() => {
+    if (role === "superadmin") return "Superadmin";
+    return role.charAt(0).toUpperCase() + role.slice(1);
+  }, [role]);
+  const userInitials = useMemo(() => {
+    const id = userId.replace(/-/g, "");
+    return (id.slice(0, 2) || "U").toUpperCase();
+  }, [userId]);
+  const newPackageDepositRm = useMemo(() => {
+    const p = Number(newPackagePrice);
+    if (!Number.isFinite(p) || p < 0) return null;
+    try {
+      return getDepositAmount(p);
+    } catch {
+      return null;
+    }
+  }, [newPackagePrice]);
+
   const monthOptions = useMemo(
     () =>
       [
@@ -574,50 +622,117 @@ export function DashboardClient({ role, userId }: DashboardClientProps) {
   );
 
   return (
-    <div className="mx-auto grid w-full max-w-[1500px] gap-6 lg:grid-cols-[260px_1fr]">
-      <aside className="lg:sticky lg:top-6 lg:self-start">
-        <div className="rounded-2xl border border-zinc-200/80 bg-white/95 p-4 shadow-lg shadow-zinc-200/50 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80 dark:shadow-black/30">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
-            Corporate Portal
-          </p>
-          <h2 className="mt-1 text-lg font-bold tracking-tight">Travel Agency System</h2>
-          <p className="mt-2 inline-flex rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-            Active Role: {role}
-          </p>
+    <>
+      {/* Fixed below global theme header (h-12) so it stays on screen while main content scrolls */}
+      <aside className="fixed left-0 top-0 z-30 flex h-dvh w-[258px] flex-col overflow-y-auto border-r border-zinc-200/70 bg-white/90 py-6 pl-5 pr-4 shadow-[4px_0_24px_rgba(0,0,0,0.06)] backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-900/90 dark:shadow-[4px_0_24px_rgba(0,0,0,0.35)]">
+        <Link
+          href="/"
+          className="flex items-center gap-3 rounded-xl px-2 py-1 no-underline outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[#39FF14] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-zinc-900"
+        >
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#39FF14] to-lime-400 text-sm font-bold text-zinc-900 shadow-[0_0_20px_rgba(57,255,20,0.45)] ring-2 ring-white/50 dark:ring-zinc-700/50">
+            SPM
+          </span>
+          <div>
+            <p className="text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-50">SPM</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">Travel Agency</p>
+          </div>
+        </Link>
 
-          <nav className="mt-4 space-y-2">
-            {navItems.map((item) => (
-              <SidebarLink
-                key={item.href}
-                href={item.href}
-                label={item.label}
-                icon={item.icon}
-                active={activeSection === item.href.replace("#", "")}
-              />
-            ))}
-          </nav>
-        </div>
+        <nav className="mt-8 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto" aria-label="Workspace">
+          {navItems.map((item) => (
+            <SidebarLink
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              icon={item.icon}
+              active={activeSection === item.href.replace("#", "")}
+            />
+          ))}
+        </nav>
+
+        <button
+          type="button"
+          onClick={() => void handleSignOut()}
+          className="mt-auto flex shrink-0 items-center gap-2 rounded-2xl border border-zinc-200/90 bg-white/60 px-3 py-2.5 text-left text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        >
+          <svg className="h-4 w-4 shrink-0 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Sign out
+        </button>
       </aside>
 
-      <main className="space-y-6">
+      <div className="flex h-dvh min-h-0 w-full flex-1 flex-col bg-zinc-100/95 pl-[258px] dark:bg-zinc-950">
+        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-zinc-200/70 bg-white/70 px-5 py-4 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-900/60 sm:px-8">
+          <label className="relative max-w-md flex-1">
+            <span className="sr-only">Search</span>
+            <svg
+              className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden
+            >
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" strokeLinecap="round" />
+            </svg>
+            <input
+              type="search"
+              placeholder="Search…"
+              className="w-full rounded-2xl border border-zinc-200/90 bg-white/90 py-2.5 pl-10 pr-4 text-sm text-zinc-900 shadow-sm outline-none ring-[#39FF14]/0 transition placeholder:text-zinc-400 focus:border-[#39FF14]/50 focus:ring-2 focus:ring-[#39FF14]/30 dark:border-zinc-700 dark:bg-zinc-950/80 dark:text-zinc-100"
+              readOnly
+            />
+          </label>
+
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <ThemeToggle />
+              <button
+                type="button"
+                onClick={() => void handleSignOut()}
+                className="rounded-xl border border-zinc-300/90 bg-white/90 px-3 py-2 text-sm font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+              >
+                Sign out
+              </button>
+            </div>
+            <button
+              type="button"
+              className="relative shrink-0 rounded-xl border border-zinc-200/80 bg-white/80 p-2.5 text-zinc-600 shadow-sm transition hover:bg-white dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              aria-label="Notifications"
+            >
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#39FF14] ring-2 ring-white dark:ring-zinc-900" />
+            </button>
+            <div className="hidden min-w-0 items-center gap-3 rounded-2xl border border-zinc-200/80 bg-white/80 px-3 py-2 shadow-sm dark:border-zinc-700 dark:bg-zinc-900/80 sm:flex">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-zinc-200 to-zinc-300 text-xs font-bold text-zinc-800 dark:from-zinc-600 dark:to-zinc-700 dark:text-zinc-100">
+                {userInitials}
+              </span>
+              <div className="min-w-0 pr-1">
+                <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">Account</p>
+                <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{roleDisplay}</p>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8 sm:py-8">
+          <main className="mx-auto max-w-6xl space-y-6">
       <section
         id="overview"
-        className="rounded-2xl border border-zinc-200/80 bg-white/95 p-5 shadow-lg shadow-zinc-200/40 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80 dark:shadow-black/20"
+        className="rounded-[1.25rem] border border-zinc-200/70 bg-white/90 p-5 shadow-[0_8px_30px_rgba(0,0,0,0.06)] backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-900/80 dark:shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
       >
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-sm font-medium text-zinc-600 dark:text-zinc-300">Current user</p>
-            <p className="font-mono text-xs">{userId}</p>
+            <p className="font-mono text-xs text-zinc-800 dark:text-zinc-200">{userId}</p>
             <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
-              Wallet Balance: <strong className="text-zinc-900 dark:text-zinc-100">RM {walletBalanceRm ?? 0}</strong>
+              Wallet balance:{" "}
+              <strong className="text-[#39FF14] dark:text-[#39FF14]">RM {walletBalanceRm ?? 0}</strong>
             </p>
           </div>
-          <button
-            onClick={handleSignOut}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800"
-          >
-            Sign out
-          </button>
         </div>
 
         <div className="mt-4 flex items-center gap-2">
@@ -626,9 +741,9 @@ export function DashboardClient({ role, userId }: DashboardClientProps) {
             <button
               type="button"
               onClick={() => setTableDensity("comfortable")}
-              className={`rounded-md px-2 py-1 text-xs font-medium ${
+              className={`rounded-lg px-2 py-1 text-xs font-medium ${
                 tableDensity === "comfortable"
-                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
+                  ? "bg-[#39FF14] text-zinc-900 shadow-sm"
                   : "text-zinc-600 dark:text-zinc-300"
               }`}
             >
@@ -637,9 +752,9 @@ export function DashboardClient({ role, userId }: DashboardClientProps) {
             <button
               type="button"
               onClick={() => setTableDensity("compact")}
-              className={`rounded-md px-2 py-1 text-xs font-medium ${
+              className={`rounded-lg px-2 py-1 text-xs font-medium ${
                 tableDensity === "compact"
-                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
+                  ? "bg-[#39FF14] text-zinc-900 shadow-sm"
                   : "text-zinc-600 dark:text-zinc-300"
               }`}
             >
@@ -673,7 +788,7 @@ export function DashboardClient({ role, userId }: DashboardClientProps) {
           <button
             type="submit"
             disabled={isLoading}
-            className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 disabled:opacity-50"
+            className="rounded-xl bg-[#39FF14] px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-[0_0_20px_rgba(57,255,20,0.35)] transition hover:bg-[#32e612] disabled:opacity-50"
           >
             Top up wallet
           </button>
@@ -979,28 +1094,141 @@ export function DashboardClient({ role, userId }: DashboardClientProps) {
         </div>
 
         {canAdminActions ? (
-          <form onSubmit={handleCreatePackage} className="mt-4 grid gap-3 md:grid-cols-3">
-            <InputField
-              label="Title"
-              value={newPackageTitle}
-              onChange={setNewPackageTitle}
-              placeholder="Example: Umrah Basic 9D7N"
-              required
-            />
-            <InputField
-              label="Price (RM)"
-              value={newPackagePrice}
-              onChange={setNewPackagePrice}
-              placeholder="7500"
-              required
-            />
-            <div className="flex items-end">
+          <form onSubmit={handleCreatePackage} className="mt-4 space-y-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <InputField
+                label="Package title"
+                value={newPackageTitle}
+                onChange={(v) => {
+                  setNewPackageTitle(v);
+                  setPackageFormError(null);
+                }}
+                placeholder="Example: Umrah Basic 9D7N"
+                required
+              />
+              <InputField
+                label="Price (RM)"
+                value={newPackagePrice}
+                onChange={(v) => {
+                  setNewPackagePrice(v);
+                  setPackageFormError(null);
+                }}
+                placeholder="7500"
+                required
+              />
+              <InputField
+                label="Seat limit (pax)"
+                value={newPackageSeatLimit}
+                onChange={(v) => {
+                  setNewPackageSeatLimit(v);
+                  setPackageFormError(null);
+                }}
+                placeholder="30"
+                required
+              />
+            </div>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Seat limit: use <strong>0</strong> for unlimited. Bookings count when status is deposit paid or verified.
+            </p>
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="block space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-300">
+                  Travel start (go)
+                </span>
+                <input
+                  type="date"
+                  value={newPackageTravelStart}
+                  onChange={(e) => {
+                    setNewPackageTravelStart(e.target.value);
+                    setPackageFormError(null);
+                  }}
+                  required
+                  className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-[#39FF14]/70 focus:ring-2 focus:ring-[#39FF14]/25 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-[#39FF14]/60"
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-300">
+                  Travel end (back)
+                </span>
+                <input
+                  type="date"
+                  value={newPackageTravelEnd}
+                  onChange={(e) => {
+                    setNewPackageTravelEnd(e.target.value);
+                    setPackageFormError(null);
+                  }}
+                  required
+                  className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-[#39FF14]/70 focus:ring-2 focus:ring-[#39FF14]/25 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-[#39FF14]/60"
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-300">
+                  Booking deadline
+                </span>
+                <input
+                  type="date"
+                  value={newPackageBookingCutoff}
+                  onChange={(e) => {
+                    setNewPackageBookingCutoff(e.target.value);
+                    setPackageFormError(null);
+                  }}
+                  required
+                  className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-[#39FF14]/70 focus:ring-2 focus:ring-[#39FF14]/25 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-[#39FF14]/60"
+                />
+              </label>
+            </div>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Booking deadline is the last day customers can reserve this package (must be on or before travel start).
+            </p>
+            <label className="block space-y-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-300">
+                Description &amp; itinerary
+              </span>
+              <textarea
+                value={newPackageDescription}
+                onChange={(e) => {
+                  setNewPackageDescription(e.target.value);
+                  setPackageFormError(null);
+                }}
+                placeholder="Paste full itinerary, inclusions, flight notes, hotel list, etc."
+                required
+                rows={8}
+                className="w-full resize-y rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-[#39FF14]/70 focus:ring-2 focus:ring-[#39FF14]/25 dark:border-zinc-700 dark:bg-zinc-900 dark:placeholder:text-zinc-500"
+              />
+            </label>
+            <label className="flex cursor-pointer items-center gap-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-zinc-300 text-[#39FF14] focus:ring-[#39FF14] dark:border-zinc-600"
+                checked={newPackageIsActive}
+                onChange={(e) => setNewPackageIsActive(e.target.checked)}
+              />
+              <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                List as active (bookable)
+              </span>
+            </label>
+            {newPackageDepositRm != null ? (
+              <p className="rounded-xl border border-zinc-200/80 bg-zinc-50/90 px-3 py-2 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-300">
+                Booking deposit for this price:{" "}
+                <strong className="text-zinc-900 dark:text-[#39FF14]">RM {newPackageDepositRm}</strong>
+                <span className="text-zinc-500 dark:text-zinc-400">
+                  {" "}
+                  (RM 300 if price &lt; 8,000; RM 500 if price ≥ 8,000)
+                </span>
+              </p>
+            ) : null}
+            {packageFormError ? (
+              <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+                {packageFormError}
+              </p>
+            ) : null}
+            <div>
               <button
                 type="submit"
                 disabled={isLoading}
-                className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                className="rounded-xl bg-[#39FF14] px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-[0_0_16px_rgba(57,255,20,0.35)] transition hover:bg-[#32e612] disabled:opacity-50"
               >
-                Create Package
+                {isLoading ? "Creating…" : "Create package"}
               </button>
             </div>
           </form>
@@ -1011,28 +1239,60 @@ export function DashboardClient({ role, userId }: DashboardClientProps) {
             <thead className="bg-zinc-50 dark:bg-zinc-900">
               <tr>
                 <th className={`px-3 ${headPadding} text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-300`}>Title</th>
+                <th className={`px-3 ${headPadding} text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-300`}>Itinerary</th>
                 <th className={`px-3 ${headPadding} text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-300`}>Price</th>
+                <th className={`px-3 ${headPadding} text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-300`}>Travel</th>
+                <th className={`px-3 ${headPadding} text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-300`}>Book by</th>
+                <th className={`px-3 ${headPadding} text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-300`}>Seats</th>
                 <th className={`px-3 ${headPadding} text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-300`}>Status</th>
                 <th className={`px-3 ${headPadding} text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-300`}>ID</th>
               </tr>
             </thead>
             <tbody>
-              {packages.map((pkg) => (
-                <tr key={pkg.id} className="border-t border-zinc-200 dark:border-zinc-800">
-                  <td className={`px-3 ${cellPadding}`}>{pkg.title}</td>
-                  <td className={`px-3 ${cellPadding}`}>RM {Number(pkg.price_rm)}</td>
-                  <td className={`px-3 ${cellPadding}`}>
-                    <StatusPill
-                      tone={pkg.is_active ? "success" : "muted"}
-                      label={pkg.is_active ? "Active" : "Inactive"}
-                    />
-                  </td>
-                  <td className={`px-3 ${cellPadding} font-mono text-xs`}>{pkg.id}</td>
-                </tr>
-              ))}
+              {packages.map((pkg) => {
+                const limit = Number(pkg.seat_limit ?? 0);
+                const taken = Number(pkg.seats_booked ?? 0);
+                const seatsLabel =
+                  limit > 0 ? `${taken} / ${limit}` : taken > 0 ? `${taken} / ∞` : "∞";
+                const travelStart = pkg.travel_start_date ?? "—";
+                const travelEnd = pkg.travel_end_date ?? "—";
+                const desc = (pkg.description ?? "").trim();
+                const descPreview =
+                  desc.length > 120 ? `${desc.slice(0, 120)}…` : desc || "—";
+                return (
+                  <tr key={pkg.id} className="border-t border-zinc-200 dark:border-zinc-800">
+                    <td className={`px-3 ${cellPadding} max-w-[10rem] align-top`}>
+                      <span className="font-medium">{pkg.title}</span>
+                    </td>
+                    <td
+                      className={`px-3 ${cellPadding} max-w-xs align-top text-xs text-zinc-600 dark:text-zinc-400`}
+                      title={desc || undefined}
+                    >
+                      {descPreview}
+                    </td>
+                    <td className={`px-3 ${cellPadding} align-top whitespace-nowrap`}>
+                      RM {Number(pkg.price_rm)}
+                    </td>
+                    <td className={`px-3 ${cellPadding} align-top whitespace-nowrap text-xs`}>
+                      {travelStart} → {travelEnd}
+                    </td>
+                    <td className={`px-3 ${cellPadding} align-top whitespace-nowrap text-xs`}>
+                      {pkg.booking_cutoff_date ?? "—"}
+                    </td>
+                    <td className={`px-3 ${cellPadding} align-top whitespace-nowrap text-xs`}>{seatsLabel}</td>
+                    <td className={`px-3 ${cellPadding} align-top`}>
+                      <StatusPill
+                        tone={pkg.is_active ? "success" : "muted"}
+                        label={pkg.is_active ? "Active" : "Inactive"}
+                      />
+                    </td>
+                    <td className={`px-3 ${cellPadding} align-top font-mono text-xs`}>{pkg.id}</td>
+                  </tr>
+                );
+              })}
               {packages.length === 0 ? (
                 <tr>
-                  <td className="px-3 py-3 text-zinc-500 dark:text-zinc-400" colSpan={4}>
+                  <td className="px-3 py-3 text-zinc-500 dark:text-zinc-400" colSpan={8}>
                     No packages found.
                   </td>
                 </tr>
@@ -1058,11 +1318,21 @@ export function DashboardClient({ role, userId }: DashboardClientProps) {
                 required
               >
                 <option value="">Select package</option>
-                {packages.map((pkg) => (
-                  <option key={pkg.id} value={pkg.id}>
-                    {pkg.title} - RM {Number(pkg.price_rm)}
-                  </option>
-                ))}
+                {packages.map((pkg) => {
+                  const limit = Number(pkg.seat_limit ?? 0);
+                  const taken = Number(pkg.seats_booked ?? 0);
+                  const open =
+                    limit <= 0 ? null : Math.max(0, limit - taken);
+                  const seatHint =
+                    open === null ? "" : open === 0 ? " — full" : ` — ${open} seats left`;
+                  return (
+                    <option key={pkg.id} value={pkg.id}>
+                      {pkg.title} — RM {Number(pkg.price_rm)}
+                      {pkg.travel_start_date ? ` (${pkg.travel_start_date})` : ""}
+                      {seatHint}
+                    </option>
+                  );
+                })}
               </select>
             </label>
             <InputField
@@ -1342,16 +1612,24 @@ export function DashboardClient({ role, userId }: DashboardClientProps) {
           {responseText || "No response yet."}
         </pre>
       </section>
-      </main>
-    </div>
+          </main>
+        </div>
+      </div>
+    </>
   );
 }
 
 type PackageRow = {
   id: string;
   title: string;
+  description?: string | null;
   price_rm: number;
   is_active: boolean;
+  seat_limit?: number | null;
+  travel_start_date?: string | null;
+  travel_end_date?: string | null;
+  booking_cutoff_date?: string | null;
+  seats_booked?: number;
 };
 
 type BookingRow = {
@@ -1434,7 +1712,7 @@ function InputField({
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         readOnly={readOnly}
-        className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 read-only:bg-zinc-100 read-only:text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-blue-400 dark:focus:ring-blue-900 dark:read-only:bg-zinc-800 dark:read-only:text-zinc-300"
+        className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-[#39FF14]/70 focus:ring-2 focus:ring-[#39FF14]/25 read-only:bg-zinc-100 read-only:text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-[#39FF14]/60 dark:focus:ring-[#39FF14]/20 dark:read-only:bg-zinc-800 dark:read-only:text-zinc-300"
         required={required}
       />
     </label>
@@ -1452,10 +1730,10 @@ function SidebarLink({ href, label, icon, active = false }: SidebarLinkProps) {
   return (
     <a
       href={href}
-      className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+      className={`flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition ${
         active
-          ? "border-blue-200 bg-blue-50 text-blue-700 shadow-sm dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300"
-          : "border-zinc-200 bg-white text-zinc-700 hover:-translate-y-0.5 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          ? "bg-[#39FF14] text-zinc-900 shadow-[0_0_22px_rgba(57,255,20,0.4)]"
+          : "text-zinc-600 hover:bg-white/70 dark:text-zinc-300 dark:hover:bg-zinc-800/70"
       }`}
     >
       <NavIcon name={icon} />
@@ -1533,9 +1811,9 @@ type KpiCardProps = {
 
 function KpiCard({ label, value }: KpiCardProps) {
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
-      <p className="mt-1 text-xl font-bold tracking-tight">{value}</p>
+    <div className="rounded-2xl border border-zinc-200/80 bg-white/95 p-4 shadow-[0_6px_24px_rgba(0,0,0,0.06)] backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/90 dark:shadow-[0_6px_24px_rgba(0,0,0,0.35)]">
+      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{label}</p>
+      <p className="mt-1.5 text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">{value}</p>
     </div>
   );
 }
